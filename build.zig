@@ -11,14 +11,18 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = options.target,
         .optimize = options.optimize,
+        .link_libc = true, // libc is required by raylib
     });
     b.installArtifact(exe);
 
     // Dependencies
-    // const foo_dep = b.dependency("foo", options);
+    const raylib_dep = b.dependency("raylib-zig", options);
+    const entt_dep = b.dependency("entt", options);
 
     // Add dependencies to the executable.
-    // exe.root_module.addImport("foo", foo_dep.module("foo"));
+    exe.root_module.addImport("raylib", raylib_dep.module("raylib"));
+    exe.linkLibrary(raylib_dep.artifact("raylib"));
+    exe.root_module.addImport("entt", entt_dep.module("zig-ecs"));
 
     // Declare executable tests.
     const exe_unit_tests = b.addTest(.{
