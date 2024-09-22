@@ -23,8 +23,9 @@ zig build run
 
 ## Controls
 
-| Key                | Description |
-| ------------------ | ----------- |
-| `H`, `Arrow Left`  | Move left   |
-| `L`, `Arrow Right` | Move right  |
-| `Space`            | Shoot       |
+| Key                | Description        |
+| ------------------ | ------------------ |
+| `H`, `Arrow Left`  | Move left          |
+| `L`, `Arrow Right` | Move right         |
+| `Space`            | Shoot              |
+| `Enter`            | Start/pause/resume |
