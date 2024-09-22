@@ -33,7 +33,7 @@ pub fn main() !void {
         .registry = &reg,
         .entities = .{
             .player = undefined,
-            .alien_grid = undefined,
+            .alien_grid = State.AlienGridState.init(2, 5, 60),
         },
     };
 
@@ -49,6 +49,7 @@ pub fn main() !void {
         updateAliens(&state);
         updateProjectiles(&state);
         checkPlayerHits(&state);
+        checkAlienGrid(&state);
 
         beginFrame();
         render(&reg);
@@ -81,16 +82,15 @@ fn setupEntites(state: *State) void {
     reg.add(player, comp.Visual.stub());
 
     state.entities.player = player;
-
-    spawnAliens(state, 2, 5, 60);
 }
 
 fn spawnAliens(state: *State, rows: u8, cols: u8, speed: f32) void {
     const reg = state.registry;
-    const grid = State.AlienGridState.init(rows, cols, speed);
+    const grid = &state.entities.alien_grid;
+    grid.spawn(rows, cols, speed);
     const shape = comp.Shape.rectangle(grid.alien_width, grid.alien_height);
-    for (0..rows) |row| {
-        for (0..cols) |col| {
+    for (0..grid.rows) |row| {
+        for (0..grid.cols) |col| {
             const alien = reg.create();
             reg.add(alien, comp.Alien{ .health = 1 + 2 * @as(u8, @intCast(row)) });
             reg.add(alien, grid.getAlienPosition(@intCast(row), @intCast(col)));
@@ -99,8 +99,6 @@ fn spawnAliens(state: *State, rows: u8, cols: u8, speed: f32) void {
             reg.add(alien, comp.Visual.color(rl.Color.green));
         }
     }
-
-    state.entities.alien_grid = grid;
 }
 
 fn shoot(state: *State) void {
@@ -187,15 +185,15 @@ fn updateAliens(state: *State) void {
     var grid = &state.entities.alien_grid;
 
     var offset_y: f32 = 0;
-
     switch (grid.direction) {
-        .right => if (grid.offset + grid.position.x + grid.getWidth() > state.config.getDisplayWidth()) {
-            grid.direction = .left;
-            offset_y = grid.space + grid.alien_height;
-        },
-        .left => if (grid.position.x - grid.offset < 0) {
-            grid.direction = .right;
-            offset_y = grid.space + grid.alien_height;
+        .right, .left => {
+            if (grid.offset + grid.position.x + grid.getWidth() > state.config.getDisplayWidth()) {
+                offset_y = grid.space + grid.alien_height;
+                grid.direction = .left;
+            } else if (grid.position.x - grid.offset < 0) {
+                offset_y = grid.space + grid.alien_height;
+                grid.direction = .right;
+            }
         },
         else => unreachable,
     }
@@ -259,6 +257,23 @@ fn checkPlayerHits(state: *State) void {
                 }
             }
         }
+    }
+}
+
+/// Checks all aliens in the grid are dead and spawn the next wave of aliens.
+fn checkAlienGrid(state: *State) void {
+    const grid = &state.entities.alien_grid;
+    if (grid.alive == 0) {
+        var rows = grid.rows;
+        var cols = grid.cols;
+        if (grid.cols == 7) {
+            cols = grid.min_cols;
+            rows += 1;
+        } else {
+            cols += 1;
+        }
+
+        spawnAliens(state, rows, cols, grid.speed * 1.05);
     }
 }
 
