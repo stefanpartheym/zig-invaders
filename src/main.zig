@@ -71,7 +71,7 @@ fn setupEntites(state: *State) void {
         .x = state.config.getDisplayWidth() / 2 - player_size / 2,
         .y = state.config.getDisplayHeight() - player_size,
     });
-    reg.add(player, comp.Speed.uniform(10));
+    reg.add(player, comp.Speed.uniform(300));
     reg.add(player, comp.Shape{
         .rectangle = .{
             .width = player_size,
@@ -82,42 +82,25 @@ fn setupEntites(state: *State) void {
 
     state.entities.player = player;
 
-    spawnAliens(state, 2, 5, 1);
+    spawnAliens(state, 2, 5, 60);
 }
 
 fn spawnAliens(state: *State, rows: u8, cols: u8, speed: f32) void {
     const reg = state.registry;
-    const offset: f32 = 100;
-    const space: f32 = 40;
-
-    const shape = comp.Shape.rectangle(30, 25);
+    const grid = State.AlienGridState.init(rows, cols, speed);
+    const shape = comp.Shape.rectangle(grid.alien_width, grid.alien_height);
     for (0..rows) |row| {
         for (0..cols) |col| {
             const alien = reg.create();
-            reg.add(alien, comp.Alien{
-                .health = 1 + 1 * @as(u8, @intCast(row)),
-            });
-            reg.add(alien, comp.Position{
-                .x = offset + (shape.rectangle.width + space) * @as(f32, @floatFromInt(col)),
-                .y = offset + (shape.rectangle.height + space) * @as(f32, @floatFromInt(row)),
-            });
-            reg.add(alien, comp.Speed{ .x = 2, .y = shape.rectangle.height + space });
+            reg.add(alien, comp.Alien{ .health = 1 + 2 * @as(u8, @intCast(row)) });
+            reg.add(alien, grid.getAlienPosition(@intCast(row), @intCast(col)));
+            reg.add(alien, comp.Speed{ .x = grid.speed, .y = grid.alien_height + grid.space });
             reg.add(alien, shape);
             reg.add(alien, comp.Visual.color(rl.Color.green));
         }
     }
 
-    state.entities.alien_grid = .{
-        .rows = rows,
-        .cols = cols,
-        .offset = offset,
-        .space = space,
-        .alien_width = shape.rectangle.width,
-        .alien_height = shape.rectangle.height,
-        .position = .{ .x = offset, .y = offset },
-        .direction = .right,
-        .speed = speed,
-    };
+    state.entities.alien_grid = grid;
 }
 
 fn shoot(state: *State) void {
@@ -131,7 +114,7 @@ fn shoot(state: *State) void {
         .x = player_pos.x + player_shape.rectangle.width / 2 - shape.rectangle.width / 2,
         .y = player_pos.y - shape.rectangle.height,
     });
-    reg.add(e, comp.Speed.uniform(10));
+    reg.add(e, comp.Speed.uniform(500));
     reg.add(e, shape);
     reg.add(e, comp.Visual.stub());
 }
@@ -152,17 +135,18 @@ fn handleAppInput(app: *Application) void {
 fn handlePlayerInput(state: *State) void {
     var pos = state.registry.get(comp.Position, state.entities.player);
     const speed = state.registry.getConst(comp.Speed, state.entities.player);
+    const delta_time = rl.getFrameTime();
 
     if (rl.isKeyDown(rl.KeyboardKey.key_h) or
         rl.isKeyDown(rl.KeyboardKey.key_left))
     {
-        pos.x -= speed.x;
+        pos.x -= speed.x * delta_time;
     }
 
     if (rl.isKeyDown(rl.KeyboardKey.key_l) or
         rl.isKeyDown(rl.KeyboardKey.key_right))
     {
-        pos.x += speed.x;
+        pos.x += speed.x * delta_time;
     }
 
     if (rl.isKeyPressed(rl.KeyboardKey.key_space)) {
@@ -175,6 +159,7 @@ fn handlePlayerInput(state: *State) void {
 //------------------------------------------------------------------------------
 
 fn updateProjectiles(state: *State) void {
+    const delta_time = rl.getFrameTime();
     var reg = state.registry;
     var view = reg.view(.{ comp.Projectile, comp.Position, comp.Speed }, .{});
     var iter = view.entityIterator();
@@ -184,13 +169,14 @@ fn updateProjectiles(state: *State) void {
         var pos = view.get(comp.Position, entity);
 
         switch (projectile.direction) {
-            .up => pos.y -= speed.y,
-            .down => pos.y += speed.y,
+            .up => pos.y -= speed.y * delta_time,
+            .down => pos.y += speed.y * delta_time,
             else => unreachable,
         }
 
         const shape = reg.getConst(comp.Shape, entity);
         // Destroy the entity, if it leaves the screen.
+        // TODO: Also check projectiles going downwards.
         if (pos.y + shape.getHeight() < 0) {
             reg.destroy(entity);
         }
@@ -199,12 +185,11 @@ fn updateProjectiles(state: *State) void {
 
 fn updateAliens(state: *State) void {
     var grid = &state.entities.alien_grid;
-    const grid_width = @as(f32, @floatFromInt(grid.cols)) * (grid.alien_width + grid.space);
 
     var offset_y: f32 = 0;
 
     switch (grid.direction) {
-        .right => if (grid.position.x + grid_width + grid.offset > state.config.getDisplayWidth()) {
+        .right => if (grid.offset + grid.position.x + grid.getWidth() > state.config.getDisplayWidth()) {
             grid.direction = .left;
             offset_y = grid.space + grid.alien_height;
         },
@@ -220,17 +205,18 @@ fn updateAliens(state: *State) void {
         .right => 1,
         else => unreachable,
     };
+    const normalized_speed = grid.speed * factor * rl.getFrameTime();
 
     var reg = state.registry;
     var view = reg.view(.{ comp.Alien, comp.Position }, .{});
     var iter = view.entityIterator();
     while (iter.next()) |entity| {
         var pos = view.get(comp.Position, entity);
-        pos.x += grid.speed * factor;
+        pos.x += normalized_speed;
         pos.y += offset_y;
     }
 
-    grid.position.x += grid.speed * factor;
+    grid.position.x += normalized_speed;
     grid.position.y += offset_y;
 }
 
@@ -263,10 +249,13 @@ fn checkPlayerHits(state: *State) void {
                     .height = target_shape.rectangle.height,
                 };
 
-                // If projectile hits alien, destroy both entities.
+                // Check if projectile hits alien.
                 if (rl.checkCollisionRecs(projectile_rect, target_rect)) {
+                    // Destroy both entities.
                     reg.destroy(entity);
                     reg.destroy(target);
+                    // Reduce number of alive aliens in grid.
+                    state.entities.alien_grid.alive -= 1;
                 }
             }
         }
