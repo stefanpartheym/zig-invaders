@@ -36,11 +36,9 @@ pub fn main() !void {
         .invasion_zone = 0.15,
         .entities = .{
             .player = undefined,
-            .alien_grid = State.AlienGridState.init(2, 5, 60),
+            .alien_grid = State.AlienGridState.init(2, 4, 60),
         },
     };
-
-    setupEntites(&state);
 
     app.start();
     defer app.stop();
@@ -52,7 +50,7 @@ pub fn main() !void {
             handlePlayerInput(&state);
             updateAliens(&state);
             updateProjectiles(&state);
-            checkPlayerHits(&state);
+            checkHits(&state);
             checkAlienGrid(&state);
         }
 
@@ -72,7 +70,7 @@ pub fn main() !void {
 // Entities
 //------------------------------------------------------------------------------
 
-fn setupEntites(state: *State) void {
+fn spawnPlayer(state: *State) void {
     const reg = state.registry;
 
     const player_size = 50;
@@ -104,11 +102,12 @@ fn spawnAliens(state: *State) void {
             reg.add(alien, comp.Speed{ .x = grid.speed, .y = grid.alien_height + grid.space });
             reg.add(alien, shape);
             reg.add(alien, comp.Visual.color(rl.Color.green));
+            reg.add(alien, comp.Cooldown.new(1));
         }
     }
 }
 
-fn cleanupEntites(state: *State) void {
+fn resetEntites(state: *State) void {
     var reg = state.registry;
     var aliens = reg.basicView(comp.Alien);
     var projectiles = reg.basicView(comp.Projectile);
@@ -125,23 +124,23 @@ fn cleanupEntites(state: *State) void {
         reg.destroy(entity);
     }
 
-    // Reset player position.
-    var player_pos = reg.get(comp.Position, state.entities.player);
-    player_pos.x = state.config.getDisplayWidth() / 2;
+    if (reg.valid(state.entities.player)) {
+        reg.destroy(state.entities.player);
+    }
+    spawnPlayer(state);
+    spawnAliens(state);
 }
 
-fn shoot(state: *State) void {
+fn shoot(state: *State, direction: comp.Direction, position: comp.Position, speed: f32) void {
     const reg = state.registry;
-    const player_pos = reg.getConst(comp.Position, state.entities.player);
-    const player_shape = reg.getConst(comp.Shape, state.entities.player);
     const shape = comp.Shape.rectangle(4, 12);
     const e = reg.create();
-    reg.add(e, comp.Projectile.up());
+    reg.add(e, comp.Projectile{ .direction = direction });
     reg.add(e, comp.Position{
-        .x = player_pos.x + player_shape.rectangle.width / 2 - shape.rectangle.width / 2,
-        .y = player_pos.y - shape.rectangle.height,
+        .x = position.x - shape.getWidth() / 2,
+        .y = position.y + if (direction == .up) shape.getHeight() else 0,
     });
-    reg.add(e, comp.Speed.uniform(500));
+    reg.add(e, comp.Speed.uniform(speed));
     reg.add(e, shape);
     reg.add(e, comp.Visual.stub());
 }
@@ -164,7 +163,7 @@ fn handleAppInput(state: *State) void {
             state.pause();
         } else {
             if (state.isReady()) {
-                spawnAliens(state);
+                resetEntites(state);
             }
             state.start();
         }
@@ -189,7 +188,17 @@ fn handlePlayerInput(state: *State) void {
     }
 
     if (rl.isKeyPressed(rl.KeyboardKey.key_space)) {
-        shoot(state);
+        const player_pos = state.registry.getConst(comp.Position, state.entities.player);
+        const player_shape = state.registry.getConst(comp.Shape, state.entities.player);
+        shoot(
+            state,
+            .up,
+            .{
+                .x = player_pos.x + player_shape.getWidth() / 2,
+                .y = player_pos.y,
+            },
+            300,
+        );
     }
 }
 
@@ -214,9 +223,10 @@ fn updateProjectiles(state: *State) void {
         }
 
         const shape = reg.getConst(comp.Shape, entity);
-        // Destroy the entity, if it leaves the screen.
-        // TODO: Also check projectiles going downwards.
-        if (pos.y + shape.getHeight() < 0) {
+        // Destroy the entity, when it leaves the screen.
+        if (pos.y > state.config.getDisplayHeight() or
+            pos.y + shape.getHeight() < 0)
+        {
             reg.destroy(entity);
         }
     }
@@ -252,7 +262,11 @@ fn updateAliens(state: *State) void {
 
     // Update position of all alive aliens.
     var reg = state.registry;
-    var view = reg.view(.{ comp.Alien, comp.Position, comp.Shape }, .{});
+
+    const player_pos = reg.getConst(comp.Position, state.entities.player);
+    const player_shape = reg.getConst(comp.Shape, state.entities.player);
+
+    var view = reg.view(.{ comp.Alien, comp.Position, comp.Shape, comp.Cooldown }, .{});
     var iter = view.entityIterator();
     while (iter.next()) |entity| {
         const shape = view.get(comp.Shape, entity);
@@ -262,61 +276,112 @@ fn updateAliens(state: *State) void {
         // Check if alien corssed the invasion zone.
         if (pos.y + shape.getHeight() > state.getInvasionZonePosition()) {
             state.loose();
-            cleanupEntites(state);
-            spawnAliens(state);
+            resetEntites(state);
             break;
+        }
+
+        var cooldown = view.get(comp.Cooldown, entity);
+        cooldown.cool(rl.getFrameTime());
+        if (cooldown.ready() and
+            pos.x >= player_pos.x and
+            pos.x <= player_pos.x + player_shape.getWidth())
+        {
+            cooldown.reset();
+            shoot(
+                state,
+                .down,
+                .{
+                    .x = pos.x + shape.getWidth() / 2,
+                    .y = pos.y + shape.getHeight(),
+                },
+                300,
+            );
         }
     }
 }
 
-fn checkPlayerHits(state: *State) void {
+fn checkHits(state: *State) void {
     var reg = state.registry;
     var targets_view = reg.view(.{ comp.Alien, comp.Position, comp.Shape }, .{});
     var view = reg.view(.{ comp.Projectile, comp.Position, comp.Shape }, .{});
     var iter = view.entityIterator();
     while (iter.next()) |entity| {
         const projectile = view.getConst(comp.Projectile, entity);
-        if (projectile.direction == .up) {
-            const pos = view.getConst(comp.Position, entity);
-            const shape = view.getConst(comp.Shape, entity);
-
-            var targets_iter = targets_view.entityIterator();
-            while (targets_iter.next()) |target| {
-                const target_pos = targets_view.getConst(comp.Position, target);
-                const target_shape = targets_view.getConst(comp.Shape, target);
-
-                const projectile_rect = rl.Rectangle{
-                    .x = pos.x,
-                    .y = pos.y,
-                    .width = shape.rectangle.width,
-                    .height = shape.rectangle.height,
-                };
-                const target_rect = rl.Rectangle{
-                    .x = target_pos.x,
-                    .y = target_pos.y,
-                    .width = target_shape.rectangle.width,
-                    .height = target_shape.rectangle.height,
-                };
-
-                // Check if projectile hits alien.
-                if (rl.checkCollisionRecs(projectile_rect, target_rect)) {
-                    // Destroy both entities.
-                    reg.destroy(entity);
-                    reg.destroy(target);
-                    // Reduce number of alive aliens in grid.
-                    state.entities.alien_grid.alive -= 1;
-                }
+        const projectile_pos = view.getConst(comp.Position, entity);
+        const projectile_shape = view.getConst(comp.Shape, entity);
+        var projectiles_iter = view.entityIterator();
+        while (projectiles_iter.next()) |target| {
+            if (entity == target) {
+                continue;
+            }
+            const target_pos = targets_view.getConst(comp.Position, target);
+            const target_shape = targets_view.getConst(comp.Shape, target);
+            // Check if projectile hits another projectile.
+            if (isHit(projectile_pos, projectile_shape, target_pos, target_shape)) {
+                // Destroy both entities.
+                reg.destroy(entity);
+                reg.destroy(target);
             }
         }
+
+        const player_pos = targets_view.getConst(comp.Position, state.entities.player);
+        const player_shape = targets_view.getConst(comp.Shape, state.entities.player);
+
+        switch (projectile.direction) {
+            .up => {
+                var targets_iter = targets_view.entityIterator();
+                while (targets_iter.next()) |target| {
+                    const target_pos = targets_view.getConst(comp.Position, target);
+                    const target_shape = targets_view.getConst(comp.Shape, target);
+                    // Check if projectile hits alien.
+                    if (isHit(projectile_pos, projectile_shape, target_pos, target_shape)) {
+                        // Destroy both entities.
+                        reg.destroy(entity);
+                        reg.destroy(target);
+                        // Reduce number of alive aliens in grid.
+                        state.entities.alien_grid.alive -= 1;
+                    }
+                }
+            },
+            .down => {
+                // Check if projectile hits player.
+                if (isHit(projectile_pos, projectile_shape, player_pos, player_shape)) {
+                    // Destroy projectile entity.
+                    state.loose();
+                    resetEntites(state);
+                }
+            },
+            else => unreachable,
+        }
     }
+}
+
+fn isHit(
+    projectile_pos: comp.Position,
+    projectile_shape: comp.Shape,
+    target_pos: comp.Position,
+    target_shape: comp.Shape,
+) bool {
+    const projectile_rect = rl.Rectangle{
+        .x = projectile_pos.x,
+        .y = projectile_pos.y,
+        .width = projectile_shape.rectangle.width,
+        .height = projectile_shape.rectangle.height,
+    };
+    const target_rect = rl.Rectangle{
+        .x = target_pos.x,
+        .y = target_pos.y,
+        .width = target_shape.getWidth(),
+        .height = target_shape.getHeight(),
+    };
+    return rl.checkCollisionRecs(projectile_rect, target_rect);
 }
 
 /// Checks all aliens in the grid are dead and spawn the next wave of aliens.
 fn checkAlienGrid(state: *State) void {
     if (state.entities.alien_grid.alive == 0) {
         state.win();
-        cleanupEntites(state);
-        spawnAliens(state);
+        resetEntites(state);
     }
 }
 

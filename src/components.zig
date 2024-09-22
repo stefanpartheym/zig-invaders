@@ -122,3 +122,28 @@ pub const Alien = struct {
     /// Health or lives of the alien.
     health: u8,
 };
+
+pub const Cooldown = struct {
+    const Self = @This();
+
+    /// Cooldown value in seconds.
+    value: f32,
+    /// Current cooldown state.
+    state: f32 = 0,
+
+    pub fn new(value: f32) Self {
+        return Self{ .value = value };
+    }
+
+    pub fn reset(self: *Self) void {
+        self.state = self.value;
+    }
+
+    pub fn cool(self: *Self, value: f32) void {
+        self.state -= @min(value, self.state);
+    }
+
+    pub fn ready(self: *const Self) bool {
+        return self.state == 0;
+    }
+};
