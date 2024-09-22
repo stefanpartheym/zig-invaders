@@ -4,6 +4,7 @@ const rl = @import("raylib");
 
 const PlatformAgnosticAllocator = @import("paa.zig");
 const Application = @import("application.zig").Application;
+const ApplicationConfig = @import("application.zig").ApplicationConfig;
 const comp = @import("components.zig");
 const State = @import("state.zig");
 
@@ -29,8 +30,10 @@ pub fn main() !void {
     defer reg.deinit();
 
     var state = State{
+        .app = &app,
         .config = &app.config,
         .registry = &reg,
+        .invasion_zone = 0.15,
         .entities = .{
             .player = undefined,
             .alien_grid = State.AlienGridState.init(2, 5, 60),
@@ -43,16 +46,21 @@ pub fn main() !void {
     defer app.stop();
 
     while (app.isRunning()) {
-        handleAppInput(&app);
-        handlePlayerInput(&state);
+        handleAppInput(&state);
 
-        updateAliens(&state);
-        updateProjectiles(&state);
-        checkPlayerHits(&state);
-        checkAlienGrid(&state);
+        if (state.isPlaying()) {
+            handlePlayerInput(&state);
+            updateAliens(&state);
+            updateProjectiles(&state);
+            checkPlayerHits(&state);
+            checkAlienGrid(&state);
+        }
 
         beginFrame();
-        render(&reg);
+        renderInvasionZone(&state);
+        renderEntities(&reg);
+        try renderHud(&state);
+        renderState(&state);
         if (app.debug_mode) {
             debugRender();
         }
@@ -66,6 +74,7 @@ pub fn main() !void {
 
 fn setupEntites(state: *State) void {
     const reg = state.registry;
+
     const player_size = 50;
     const player = reg.create();
     reg.add(player, comp.Position{
@@ -80,14 +89,12 @@ fn setupEntites(state: *State) void {
         },
     });
     reg.add(player, comp.Visual.stub());
-
     state.entities.player = player;
 }
 
-fn spawnAliens(state: *State, rows: u8, cols: u8, speed: f32) void {
+fn spawnAliens(state: *State) void {
     const reg = state.registry;
     const grid = &state.entities.alien_grid;
-    grid.spawn(rows, cols, speed);
     const shape = comp.Shape.rectangle(grid.alien_width, grid.alien_height);
     for (0..grid.rows) |row| {
         for (0..grid.cols) |col| {
@@ -99,6 +106,28 @@ fn spawnAliens(state: *State, rows: u8, cols: u8, speed: f32) void {
             reg.add(alien, comp.Visual.color(rl.Color.green));
         }
     }
+}
+
+fn cleanupEntites(state: *State) void {
+    var reg = state.registry;
+    var aliens = reg.basicView(comp.Alien);
+    var projectiles = reg.basicView(comp.Projectile);
+
+    // Remove all aliens.
+    var iter = aliens.entityIterator();
+    while (iter.next()) |entity| {
+        reg.destroy(entity);
+    }
+
+    // Remove all projects.
+    iter = projectiles.entityIterator();
+    while (iter.next()) |entity| {
+        reg.destroy(entity);
+    }
+
+    // Reset player position.
+    var player_pos = reg.get(comp.Position, state.entities.player);
+    player_pos.x = state.config.getDisplayWidth() / 2;
 }
 
 fn shoot(state: *State) void {
@@ -121,12 +150,24 @@ fn shoot(state: *State) void {
 // Input
 //------------------------------------------------------------------------------
 
-fn handleAppInput(app: *Application) void {
+fn handleAppInput(state: *State) void {
     if (rl.windowShouldClose() or rl.isKeyPressed(rl.KeyboardKey.key_q)) {
-        app.shutdown();
+        state.app.shutdown();
     }
+
     if (rl.isKeyPressed(rl.KeyboardKey.key_f1)) {
-        app.toggleDebugMode();
+        state.app.toggleDebugMode();
+    }
+
+    if (rl.isKeyPressed(rl.KeyboardKey.key_enter)) {
+        if (state.isPlaying()) {
+            state.pause();
+        } else {
+            if (state.isReady()) {
+                spawnAliens(state);
+            }
+            state.start();
+        }
     }
 }
 
@@ -205,17 +246,27 @@ fn updateAliens(state: *State) void {
     };
     const normalized_speed = grid.speed * factor * rl.getFrameTime();
 
+    // Update grid position.
+    grid.position.x += normalized_speed;
+    grid.position.y += offset_y;
+
+    // Update position of all alive aliens.
     var reg = state.registry;
-    var view = reg.view(.{ comp.Alien, comp.Position }, .{});
+    var view = reg.view(.{ comp.Alien, comp.Position, comp.Shape }, .{});
     var iter = view.entityIterator();
     while (iter.next()) |entity| {
+        const shape = view.get(comp.Shape, entity);
         var pos = view.get(comp.Position, entity);
         pos.x += normalized_speed;
         pos.y += offset_y;
+        // Check if alien corssed the invasion zone.
+        if (pos.y + shape.getHeight() > state.getInvasionZonePosition()) {
+            state.loose();
+            cleanupEntites(state);
+            spawnAliens(state);
+            break;
+        }
     }
-
-    grid.position.x += normalized_speed;
-    grid.position.y += offset_y;
 }
 
 fn checkPlayerHits(state: *State) void {
@@ -262,18 +313,10 @@ fn checkPlayerHits(state: *State) void {
 
 /// Checks all aliens in the grid are dead and spawn the next wave of aliens.
 fn checkAlienGrid(state: *State) void {
-    const grid = &state.entities.alien_grid;
-    if (grid.alive == 0) {
-        var rows = grid.rows;
-        var cols = grid.cols;
-        if (grid.cols == 7) {
-            cols = grid.min_cols;
-            rows += 1;
-        } else {
-            cols += 1;
-        }
-
-        spawnAliens(state, rows, cols, grid.speed * 1.05);
+    if (state.entities.alien_grid.alive == 0) {
+        state.win();
+        cleanupEntites(state);
+        spawnAliens(state);
     }
 }
 
@@ -294,7 +337,7 @@ fn debugRender() void {
     rl.drawFPS(10, 10);
 }
 
-fn render(reg: *entt.Registry) void {
+fn renderEntities(reg: *entt.Registry) void {
     var view = reg.view(.{ comp.Position, comp.Shape, comp.Visual }, .{});
     var iter = view.entityIterator();
     while (iter.next()) |entity| {
@@ -306,6 +349,83 @@ fn render(reg: *entt.Registry) void {
             .color => renderShape(pos, shape, visual.color.value),
         }
     }
+}
+
+fn renderInvasionZone(state: *const State) void {
+    renderShape(
+        comp.Position{
+            .x = 0,
+            .y = state.getInvasionZonePosition(),
+        },
+        comp.Shape{
+            .rectangle = .{
+                .width = state.config.getDisplayWidth(),
+                .height = state.config.getDisplayHeight() - state.getInvasionZonePosition(),
+            },
+        },
+        rl.Color.yellow.alpha(0.1),
+    );
+}
+
+fn renderHud(state: *const State) !void {
+    const color = rl.Color.ray_white;
+    const size = 16;
+    const offset_y = size;
+    const offset_x = 130;
+    var text_buf: [255]u8 = undefined;
+    const score_text = try std.fmt.bufPrintZ(&text_buf, "Lives: {d}", .{state.lives});
+    rl.drawText(
+        score_text,
+        @as(i32, @intFromFloat(state.config.getDisplayWidth())) - offset_x,
+        offset_y,
+        size,
+        color,
+    );
+    const lives_text = try std.fmt.bufPrintZ(&text_buf, "Score: {d}", .{state.score});
+    rl.drawText(
+        lives_text,
+        @as(i32, @intFromFloat(state.config.getDisplayWidth())) - offset_x,
+        offset_y * 1 + size,
+        size,
+        color,
+    );
+    const wave_text = try std.fmt.bufPrintZ(&text_buf, "Wave: {d}", .{state.entities.alien_grid.wave + 1});
+    rl.drawText(
+        wave_text,
+        @as(i32, @intFromFloat(state.config.getDisplayWidth())) - offset_x,
+        offset_y * 2 + size,
+        size,
+        color,
+    );
+}
+
+fn renderState(state: *const State) void {
+    const color = rl.Color.ray_white;
+    const size = 24;
+    switch (state.status) {
+        .ready => renderTextCentered(state.config, "Press [Enter] to start.", size, color),
+        .playing => {},
+        .paused => renderTextCentered(state.config, "Paused\nPress [Enter] to resume.", size, color),
+        .won => renderTextCentered(state.config, "You defeated the enemy!\nPress [Enter] when your're ready for the next wave.", size, color),
+        .lost => renderTextCentered(state.config, "You lost!\nPress [Enter] to retry.", size, color),
+        .gameover => renderTextCentered(state.config, "GAME OVER", size, color),
+    }
+}
+
+fn renderTextCentered(
+    config: *const ApplicationConfig,
+    text: [*:0]const u8,
+    size: i32,
+    color: rl.Color,
+) void {
+    const text_width: f32 = @floatFromInt(rl.measureText(text, size));
+    rl.drawText(
+        text,
+        @as(i32, @intFromFloat(config.getDisplayWidth() / 2 - text_width / 2)),
+        @as(i32, @intFromFloat(config.getDisplayHeight() / 2)) - @divTrunc(size, 2),
+        size,
+        color,
+    );
 }
 
 /// Render a stub shape.
