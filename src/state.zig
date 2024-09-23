@@ -1,12 +1,32 @@
 const entt = @import("entt");
+const rl = @import("raylib");
 const comp = @import("components.zig");
 const app = @import("application.zig");
 
 const State = @This();
 const max_lives = 3;
+const Sounds = enum {
+    soundtrack,
+    explosion,
+    explosion_short,
+    impact,
+    gameover,
+    loose,
+    win,
+};
 
 app: *app.Application,
 config: *const app.ApplicationConfig,
+sounds: struct {
+    soundtrack: rl.Sound,
+    explosion: rl.Sound,
+    explosion_short: rl.Sound,
+    impact: rl.Sound,
+    gameover: rl.Sound,
+    loose: rl.Sound,
+    win: rl.Sound,
+},
+sound_enabled: bool,
 registry: *entt.Registry,
 player_entity: entt.Entity,
 invader_grid: InvaderGridState,
@@ -19,6 +39,35 @@ status: Status = .ready,
 score: u8 = 0,
 lives: u8 = max_lives,
 
+pub fn playSound(self: *State, sound_type: Sounds) void {
+    if (self.sound_enabled) {
+        const sound: rl.Sound =
+            switch (sound_type) {
+            .soundtrack => self.sounds.soundtrack,
+            .explosion => self.sounds.explosion,
+            .explosion_short => self.sounds.explosion_short,
+            .impact => self.sounds.impact,
+            .gameover => self.sounds.gameover,
+            .loose => self.sounds.loose,
+            .win => self.sounds.win,
+        };
+        rl.playSound(sound);
+    }
+}
+
+pub fn toggleSound(self: *State) void {
+    self.sound_enabled = !self.sound_enabled;
+    if (!self.sound_enabled) {
+        rl.stopSound(self.sounds.soundtrack);
+        rl.stopSound(self.sounds.explosion);
+        rl.stopSound(self.sounds.explosion_short);
+        rl.stopSound(self.sounds.impact);
+        rl.stopSound(self.sounds.gameover);
+        rl.stopSound(self.sounds.loose);
+        rl.stopSound(self.sounds.win);
+    }
+}
+
 pub fn start(self: *State) void {
     self.status = .playing;
 }
@@ -28,6 +77,7 @@ pub fn pause(self: *State) void {
 }
 
 pub fn win(self: *State) void {
+    self.playSound(.win);
     self.score += 1;
     self.status = .won;
     self.invader_grid.nextWave();
@@ -36,9 +86,11 @@ pub fn win(self: *State) void {
 pub fn loose(self: *State) void {
     self.lives -= 1;
     if (self.lives > 0) {
+        self.playSound(.loose);
         self.status = .lost;
         self.invader_grid.resetWave();
     } else {
+        self.playSound(.gameover);
         self.status = .gameover;
         self.lives = max_lives;
         self.score = 0;

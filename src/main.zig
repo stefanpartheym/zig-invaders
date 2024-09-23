@@ -25,6 +25,8 @@ pub fn main() !void {
         },
     );
     defer app.deinit();
+    rl.initAudioDevice();
+    defer rl.closeAudioDevice();
 
     var reg = entt.Registry.init(paa.allocator());
     defer reg.deinit();
@@ -32,16 +34,36 @@ pub fn main() !void {
     var state = State{
         .app = &app,
         .config = &app.config,
+        .sounds = .{
+            .soundtrack = rl.loadSound("assets/soundtrack.wav"),
+            .explosion = rl.loadSound("assets/explosion.wav"),
+            .explosion_short = rl.loadSound("assets/explosion-short.wav"),
+            .impact = rl.loadSound("assets/impact.wav"),
+            .gameover = rl.loadSound("assets/gameover.wav"),
+            .loose = rl.loadSound("assets/loose.wav"),
+            .win = rl.loadSound("assets/win.wav"),
+        },
+        .sound_enabled = true,
         .registry = &reg,
         .invasion_zone = 0.15,
         .player_entity = undefined,
         .invader_grid = State.InvaderGridState.init(2, 4, 60),
     };
+    rl.setSoundVolume(state.sounds.explosion_short, 0.4);
+    rl.setSoundVolume(state.sounds.explosion, 0.4);
+    rl.setSoundVolume(state.sounds.win, 0.8);
+    rl.setSoundVolume(state.sounds.loose, 0.8);
+    rl.setSoundVolume(state.sounds.gameover, 0.8);
 
     app.start();
     defer app.stop();
 
     while (app.isRunning()) {
+        // Loop background music.
+        if (!rl.isSoundPlaying(state.sounds.soundtrack)) {
+            state.playSound(.soundtrack);
+        }
+
         handleAppInput(&state);
 
         if (state.isPlaying()) {
@@ -156,6 +178,10 @@ fn handleAppInput(state: *State) void {
         state.app.toggleDebugMode();
     }
 
+    if (rl.isKeyPressed(rl.KeyboardKey.key_f2)) {
+        state.toggleSound();
+    }
+
     if (rl.isKeyPressed(rl.KeyboardKey.key_enter)) {
         if (state.isPlaying()) {
             state.pause();
@@ -221,10 +247,12 @@ fn updateProjectiles(state: *State) void {
         }
 
         const shape = reg.getConst(comp.Shape, entity);
-        // Destroy the entity, when it leaves the screen.
-        if (pos.y > state.config.getDisplayHeight() or
-            pos.y + shape.getHeight() < 0)
-        {
+        // Destroy the projectile, when it leaves the screen.
+        if (pos.y > state.config.getDisplayHeight()) {
+            // Play impact sound when projectile hits the ground.
+            state.playSound(.impact);
+            reg.destroy(entity);
+        } else if (pos.y + shape.getHeight() < 0) {
             reg.destroy(entity);
         }
     }
@@ -316,6 +344,8 @@ fn checkHits(state: *State) void {
             const target_shape = targets_view.getConst(comp.Shape, target);
             // Check if projectile hits another projectile.
             if (isHit(projectile_pos, projectile_shape, target_pos, target_shape)) {
+                // Play impact sound when projectile hits projectile.
+                state.playSound(.impact);
                 // Destroy both entities.
                 reg.destroy(entity);
                 reg.destroy(target);
@@ -333,6 +363,7 @@ fn checkHits(state: *State) void {
                     const target_shape = targets_view.getConst(comp.Shape, target);
                     // Check if projectile hits invader.
                     if (isHit(projectile_pos, projectile_shape, target_pos, target_shape)) {
+                        state.playSound(.explosion_short);
                         // Destroy both entities.
                         reg.destroy(entity);
                         reg.destroy(target);
@@ -344,6 +375,7 @@ fn checkHits(state: *State) void {
             .down => {
                 // Check if projectile hits player.
                 if (isHit(projectile_pos, projectile_shape, player_pos, player_shape)) {
+                    state.playSound(.explosion);
                     // Destroy projectile entity.
                     state.loose();
                     resetEntites(state);
