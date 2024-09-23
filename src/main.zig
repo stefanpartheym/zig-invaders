@@ -498,11 +498,11 @@ fn renderState(state: *const State) void {
     const color = rl.Color.ray_white;
     const size = 24;
     switch (state.status) {
-        .ready => renderTextCentered(state.config, "Press [Enter] to start.", size, color),
+        .ready => renderTextCentered(state.config, "Press [Enter] to start", size, color),
         .playing => {},
-        .paused => renderTextCentered(state.config, "Paused\nPress [Enter] to resume.", size, color),
-        .won => renderTextCentered(state.config, "You defeated the enemy!\nPress [Enter] when your're ready for the next wave.", size, color),
-        .lost => renderTextCentered(state.config, "You lost!\nPress [Enter] to retry.", size, color),
+        .paused => renderTextCentered(state.config, "Press [Enter] to resume", size, color),
+        .won => renderTextCentered(state.config, "Invaders defeated!\nGet ready for the next wave!\nPress [Enter] to start", size, color),
+        .lost => renderTextCentered(state.config, "You lost!\nPress [Enter] to retry", size, color),
         .gameover => renderTextCentered(state.config, "GAME OVER", size, color),
     }
 }
