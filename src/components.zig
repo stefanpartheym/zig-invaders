@@ -118,8 +118,8 @@ pub const Projectile = struct {
     }
 };
 
-pub const Alien = struct {
-    /// Health or lives of the alien.
+pub const Invader = struct {
+    /// Health or lives of the invader.
     health: u8,
 };
 

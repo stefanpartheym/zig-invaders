@@ -8,13 +8,11 @@ const max_lives = 3;
 app: *app.Application,
 config: *const app.ApplicationConfig,
 registry: *entt.Registry,
-entities: struct {
-    player: entt.Entity,
-    alien_grid: AlienGridState,
-},
+player_entity: entt.Entity,
+invader_grid: InvaderGridState,
 /// Value in percent, that indicates how far up from the bottom of the screen
 /// invasion zone begins.
-/// If an alien crosses the invasion zone, the player loses.
+/// If an invader crosses the invasion zone, the player loses.
 invasion_zone: f32,
 
 status: Status = .ready,
@@ -32,19 +30,19 @@ pub fn pause(self: *State) void {
 pub fn win(self: *State) void {
     self.score += 1;
     self.status = .won;
-    self.entities.alien_grid.nextWave();
+    self.invader_grid.nextWave();
 }
 
 pub fn loose(self: *State) void {
     self.lives -= 1;
     if (self.lives > 0) {
         self.status = .lost;
-        self.entities.alien_grid.resetWave();
+        self.invader_grid.resetWave();
     } else {
         self.status = .gameover;
         self.lives = max_lives;
         self.score = 0;
-        self.entities.alien_grid.reset();
+        self.invader_grid.reset();
     }
 }
 
@@ -71,24 +69,24 @@ pub const Status = enum {
     gameover,
 };
 
-pub const AlienGridState = struct {
+pub const InvaderGridState = struct {
     const Self = @This();
 
     /// Number of minimum rows in the grid.
     min_rows: u8,
-    /// Number of minimum aliens per row.
+    /// Number of minimum invaders per row.
     min_cols: u8,
     /// Minimum speed.
     min_speed: f32,
     /// Number of rows for current wave.
     wave_rows: u8,
-    /// Number of aliens for current wave.
+    /// Number of invaders for current wave.
     wave_cols: u8,
-    /// Width of an alien within the grid.
-    alien_width: f32,
-    /// Height of an alien within the grid.
-    alien_height: f32,
-    /// Space between the aliens.
+    /// Width of an invader within the grid.
+    invader_width: f32,
+    /// Height of an invader within the grid.
+    invader_height: f32,
+    /// Space between the invaders.
     space: f32,
     /// The grid's offset to the edges of the screen.
     offset: f32,
@@ -96,7 +94,7 @@ pub const AlienGridState = struct {
     wave: u8,
     /// Number of rows in the grid.
     rows: u8,
-    /// Number of aliens per row.
+    /// Number of invaders per row.
     cols: u8,
     /// Speed of the grid.
     speed: f32,
@@ -104,7 +102,7 @@ pub const AlienGridState = struct {
     position: comp.Position,
     /// Current direction in which the grid moves (either `left` or `right`).
     direction: comp.Direction,
-    /// Number of currently alive aliens in the grid.
+    /// Number of currently alive invaders in the grid.
     alive: u8,
 
     pub fn init(min_rows: u8, min_cols: u8, min_speed: f32) Self {
@@ -115,8 +113,8 @@ pub const AlienGridState = struct {
             .min_speed = min_speed,
             .wave_rows = min_rows,
             .wave_cols = min_cols,
-            .alien_width = 30,
-            .alien_height = 25,
+            .invader_width = 30,
+            .invader_height = 25,
             .space = 40,
             .offset = offset,
             .wave = 0,
@@ -169,20 +167,20 @@ pub const AlienGridState = struct {
     /// Returns current grid width in pixel.
     pub fn getWidth(self: *const Self) f32 {
         const factor = @as(f32, @floatFromInt(self.cols));
-        return (self.alien_width + self.space) * factor - self.space;
+        return (self.invader_width + self.space) * factor - self.space;
     }
 
     /// Returns current grid height in pixel.
     pub fn getHeight(self: *const Self) f32 {
         const factor = @as(f32, @floatFromInt(self.rows));
-        return (self.alien_height + self.space) * factor - self.space;
+        return (self.invader_height + self.space) * factor - self.space;
     }
 
-    /// Returns the position on the screen of the alien at `row`:`col`.
-    pub fn getAlienPosition(self: *const Self, row: u8, col: u8) comp.Position {
+    /// Returns the position on the screen of the invader at `row`:`col`.
+    pub fn getInvaderPosition(self: *const Self, row: u8, col: u8) comp.Position {
         return comp.Position{
-            .x = self.offset + (self.alien_width + self.space) * @as(f32, @floatFromInt(col)),
-            .y = self.offset + (self.alien_height + self.space) * @as(f32, @floatFromInt(row)),
+            .x = self.offset + (self.invader_width + self.space) * @as(f32, @floatFromInt(col)),
+            .y = self.offset + (self.invader_height + self.space) * @as(f32, @floatFromInt(row)),
         };
     }
 };
