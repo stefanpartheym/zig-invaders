@@ -80,7 +80,7 @@ pub fn main() !void {
         try renderHud(&state);
         renderState(&state);
         if (app.debug_mode) {
-            debugRender();
+            renderDebug(&reg);
         }
         endFrame();
     }
@@ -93,19 +93,19 @@ pub fn main() !void {
 fn spawnPlayer(state: *State) void {
     const reg = state.registry;
 
-    const player_size = 50;
+    const player_height = 20;
+    const player_width = player_height * 2;
     const player = reg.create();
     reg.add(player, comp.Position{
-        .x = state.config.getDisplayWidth() / 2 - player_size / 2,
-        .y = state.config.getDisplayHeight() - player_size,
+        .x = state.config.getDisplayWidth() / 2 - player_width / 2,
+        .y = state.config.getDisplayHeight() - player_height,
     });
     reg.add(player, comp.Speed.uniform(300));
-    reg.add(player, comp.Shape{
-        .rectangle = .{
-            .width = player_size,
-            .height = player_size,
-        },
-    });
+    reg.add(player, comp.Shape.triangle(
+        .{ player_width / 2, 0 },
+        .{ 0, player_height },
+        .{ player_width, player_height },
+    ));
     reg.add(player, comp.Visual.stub());
     state.player_entity = player;
 }
@@ -121,7 +121,7 @@ fn spawnInvaders(state: *State) void {
             reg.add(invader, grid.getInvaderPosition(@intCast(row), @intCast(col)));
             reg.add(invader, comp.Speed{ .x = grid.speed, .y = grid.invader_height + grid.space });
             reg.add(invader, shape);
-            reg.add(invader, comp.Visual.color(rl.Color.green));
+            reg.add(invader, comp.Visual.color(rl.Color.green, false));
             reg.add(invader, comp.Cooldown.new(1));
         }
     }
@@ -151,9 +151,14 @@ fn resetEntites(state: *State) void {
     spawnInvaders(state);
 }
 
-fn shoot(state: *State, direction: comp.Direction, position: comp.Position, speed: f32) void {
+fn shoot(
+    state: *State,
+    direction: comp.Direction,
+    position: comp.Position,
+    shape: comp.Shape,
+    speed: f32,
+) void {
     const reg = state.registry;
-    const shape = comp.Shape.rectangle(4, 12);
     const e = reg.create();
     reg.add(e, comp.Projectile{ .direction = direction });
     reg.add(e, comp.Position{
@@ -221,6 +226,7 @@ fn handlePlayerInput(state: *State) void {
                 .x = player_pos.x + player_shape.getWidth() / 2,
                 .y = player_pos.y,
             },
+            comp.Shape.rectangle(4, 12),
             300,
         );
     }
@@ -320,6 +326,7 @@ fn updateInvaders(state: *State) void {
                     .x = pos.x + shape.getWidth() / 2,
                     .y = pos.y + shape.getHeight(),
                 },
+                comp.Shape.triangle(.{ 0, 0 }, .{ 4, 8 }, .{ 8, 0 }),
                 300,
             );
         }
@@ -395,8 +402,8 @@ fn isHit(
     const projectile_rect = rl.Rectangle{
         .x = projectile_pos.x,
         .y = projectile_pos.y,
-        .width = projectile_shape.rectangle.width,
-        .height = projectile_shape.rectangle.height,
+        .width = projectile_shape.getWidth(),
+        .height = projectile_shape.getHeight(),
     };
     const target_rect = rl.Rectangle{
         .x = target_pos.x,
@@ -428,8 +435,24 @@ fn endFrame() void {
     rl.endDrawing();
 }
 
-fn debugRender() void {
+/// Render debug information and entity shape AABB's.
+fn renderDebug(reg: *entt.Registry) void {
     rl.drawFPS(10, 10);
+    var view = reg.view(.{ comp.Position, comp.Shape, comp.Visual }, .{});
+    var iter = view.entityIterator();
+    while (iter.next()) |entity| {
+        var pos = view.getConst(comp.Position, entity);
+        const shape = view.getConst(comp.Shape, entity);
+        if (shape == .circle) {
+            pos.x -= shape.getWidth() / 2;
+            pos.y -= shape.getHeight() / 2;
+        }
+        renderEntity(
+            pos,
+            comp.Shape.rectangle(shape.getWidth(), shape.getHeight()),
+            comp.Visual.color(rl.Color.yellow, true),
+        );
+    }
 }
 
 fn renderEntities(reg: *entt.Registry) void {
@@ -439,10 +462,14 @@ fn renderEntities(reg: *entt.Registry) void {
         const pos = view.getConst(comp.Position, entity);
         const shape = view.getConst(comp.Shape, entity);
         const visual = view.getConst(comp.Visual, entity);
-        switch (visual) {
-            .stub => renderStub(pos, shape),
-            .color => renderShape(pos, shape, visual.color.value),
-        }
+        renderEntity(pos, shape, visual);
+    }
+}
+
+fn renderEntity(pos: comp.Position, shape: comp.Shape, visual: comp.Visual) void {
+    switch (visual) {
+        .stub => renderStub(pos, shape),
+        .color => renderShape(pos, shape, visual.color.value, visual.color.outline),
     }
 }
 
@@ -459,6 +486,7 @@ fn renderInvasionZone(state: *const State) void {
             },
         },
         rl.Color.yellow.alpha(0.1),
+        false,
     );
 }
 
@@ -526,21 +554,55 @@ fn renderTextCentered(
 /// Render a stub shape.
 /// TODO: Make visual appearance more noticeable.
 fn renderStub(pos: comp.Position, shape: comp.Shape) void {
-    renderShape(pos, shape, rl.Color.magenta);
+    renderShape(pos, shape, rl.Color.magenta, false);
 }
 
 /// Generic rendering function to be used for `stub` and `color` visuals.
-fn renderShape(pos: comp.Position, shape: comp.Shape, color: rl.Color) void {
+fn renderShape(pos: comp.Position, shape: comp.Shape, color: rl.Color, outline: bool) void {
+    const p = .{ .x = pos.x, .y = pos.y };
     switch (shape) {
-        .rectangle => rl.drawRectangleV(
-            .{ .x = pos.x, .y = pos.y },
-            .{ .x = shape.rectangle.width, .y = shape.rectangle.height },
-            color,
-        ),
-        .circle => rl.drawCircleV(
-            .{ .x = pos.x, .y = pos.y },
-            shape.circle.radius,
-            color,
-        ),
+        .triangle => {
+            const v1 = .{
+                .x = p.x + shape.triangle.v1[0],
+                .y = p.y + shape.triangle.v1[1],
+            };
+            const v2 = .{
+                .x = p.x + shape.triangle.v2[0],
+                .y = p.y + shape.triangle.v2[1],
+            };
+            const v3 = .{
+                .x = p.x + shape.triangle.v3[0],
+                .y = p.y + shape.triangle.v3[1],
+            };
+            if (outline) {
+                rl.drawTriangleLines(v1, v2, v3, color);
+            } else {
+                rl.drawTriangle(v1, v2, v3, color);
+            }
+        },
+        .rectangle => {
+            const size = .{ .x = shape.rectangle.width, .y = shape.rectangle.height };
+            if (outline) {
+                // NOTE: The `drawRectangleLines` function draws the outlined
+                // rectangle incorrectly. Hence, drawing the lines individually.
+                const v1 = .{ .x = p.x, .y = p.y };
+                const v2 = .{ .x = p.x + size.x, .y = p.y };
+                const v3 = .{ .x = p.x + size.x, .y = p.y + size.y };
+                const v4 = .{ .x = p.x, .y = p.y + size.y };
+                rl.drawLineV(v1, v2, color);
+                rl.drawLineV(v2, v3, color);
+                rl.drawLineV(v3, v4, color);
+                rl.drawLineV(v4, v1, color);
+            } else {
+                rl.drawRectangleV(p, size, color);
+            }
+        },
+        .circle => {
+            if (outline) {
+                rl.drawCircleLinesV(p, shape.circle.radius, color);
+            } else {
+                rl.drawCircleV(p, shape.circle.radius, color);
+            }
+        },
     }
 }

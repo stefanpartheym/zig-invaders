@@ -17,13 +17,20 @@ pub const Speed = struct {
 };
 
 pub const ShapeType = enum {
+    triangle,
     rectangle,
     circle,
 };
 
 pub const Shape = union(ShapeType) {
     const Self = @This();
+    const Vec2 = @Vector(2, f32);
 
+    triangle: struct {
+        v1: Vec2,
+        v2: Vec2,
+        v3: Vec2,
+    },
     rectangle: struct {
         width: f32,
         height: f32,
@@ -31,6 +38,16 @@ pub const Shape = union(ShapeType) {
     circle: struct {
         radius: f32,
     },
+
+    pub fn triangle(v1: Vec2, v2: Vec2, v3: Vec2) Self {
+        return Self{
+            .triangle = .{
+                .v1 = v1,
+                .v2 = v2,
+                .v3 = v3,
+            },
+        };
+    }
 
     pub fn rectangle(width: f32, height: f32) Self {
         return Self{
@@ -49,6 +66,7 @@ pub const Shape = union(ShapeType) {
 
     pub fn getWidth(self: *const Self) f32 {
         switch (self.*) {
+            .triangle => return self.getTriangleVectorLength(0),
             .rectangle => return self.rectangle.width,
             .circle => return self.circle.radius * 2,
         }
@@ -56,9 +74,18 @@ pub const Shape = union(ShapeType) {
 
     pub fn getHeight(self: *const Self) f32 {
         switch (self.*) {
+            .triangle => return self.getTriangleVectorLength(1),
             .rectangle => return self.rectangle.height,
             .circle => return self.circle.radius * 2,
         }
+    }
+
+    fn getTriangleVectorLength(self: *const Self, dimension: u8) f32 {
+        const v1 = self.triangle.v1;
+        const v2 = self.triangle.v2;
+        const v3 = self.triangle.v3;
+        return @max(@max(v1[dimension], v2[dimension]), v3[dimension]) -
+            @min(@min(v1[dimension], v2[dimension]), v3[dimension]);
     }
 };
 
@@ -77,6 +104,7 @@ pub const Visual = union(VisualType) {
     },
     color: struct {
         value: rl.Color,
+        outline: bool,
     },
 
     /// Creates a stub Visual component.
@@ -87,9 +115,12 @@ pub const Visual = union(VisualType) {
     }
 
     /// Creates a stub Visual component.
-    pub fn color(value: rl.Color) Self {
+    pub fn color(value: rl.Color, outline: bool) Self {
         return Self{
-            .color = .{ .value = value },
+            .color = .{
+                .value = value,
+                .outline = outline,
+            },
         };
     }
 };
