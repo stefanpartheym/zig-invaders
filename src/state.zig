@@ -2,6 +2,7 @@ const entt = @import("entt");
 const rl = @import("raylib");
 const comp = @import("components.zig");
 const app = @import("application.zig");
+const TextureStore = @import("store.zig").TextureStore;
 
 const State = @This();
 const max_lives = 3;
@@ -17,6 +18,7 @@ const Sounds = enum {
 
 app: *app.Application,
 config: *const app.ApplicationConfig,
+texture_store: *TextureStore,
 sounds: struct {
     soundtrack: rl.Sound,
     explosion: rl.Sound,

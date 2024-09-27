@@ -38,6 +38,7 @@ List of all assets used in this game:
 
 | File                         | Source/Author                                                                                                                              |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `assets/explosion.png`       | [Sogomn on OpenGameArt.org](https://opengameart.org/content/explosion-3)                                                                   |
 | `assets/soundtrack.wav`      | [stefanpartheym](https://github.com/stefanpartheym) in [Ardour](https://ardour.org/) with [OB-Xd](https://www.discodsp.com/obxd/)          |
 | `assets/explosion.wav`       | [stefanpartheym](https://github.com/stefanpartheym) in [Ardour](https://ardour.org/) with [Surge XT](https://surge-synthesizer.github.io/) |
 | `assets/explosion-short.wav` | [stefanpartheym](https://github.com/stefanpartheym) in [Ardour](https://ardour.org/) with [Surge XT](https://surge-synthesizer.github.io/) |

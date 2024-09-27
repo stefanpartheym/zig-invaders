@@ -92,6 +92,7 @@ pub const Shape = union(ShapeType) {
 pub const VisualType = enum {
     stub,
     color,
+    sprite,
 };
 
 pub const Visual = union(VisualType) {
@@ -105,6 +106,11 @@ pub const Visual = union(VisualType) {
     color: struct {
         value: rl.Color,
         outline: bool,
+    },
+    sprite: struct {
+        texture: *const rl.Texture,
+        pos: Position,
+        size: Position,
     },
 
     /// Creates a stub Visual component.
@@ -120,6 +126,20 @@ pub const Visual = union(VisualType) {
             .color = .{
                 .value = value,
                 .outline = outline,
+            },
+        };
+    }
+
+    pub fn sprite(
+        texture: *const rl.Texture,
+        pos: Position,
+        size: Position,
+    ) Self {
+        return Self{
+            .sprite = .{
+                .texture = texture,
+                .pos = pos,
+                .size = size,
             },
         };
     }
@@ -152,6 +172,25 @@ pub const Projectile = struct {
 pub const Invader = struct {
     /// Health or lives of the invader.
     health: u8,
+};
+
+pub const Lifetime = struct {
+    const Self = @This();
+
+    /// Lifetime value in seconds.
+    state: f32,
+
+    pub fn new(value: f32) Self {
+        return Self{ .state = value };
+    }
+
+    pub fn update(self: *Self, value: f32) void {
+        self.state -= value;
+    }
+
+    pub fn dead(self: *const Self) bool {
+        return self.state <= 0;
+    }
 };
 
 pub const Cooldown = struct {

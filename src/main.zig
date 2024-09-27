@@ -7,6 +7,7 @@ const Application = @import("application.zig").Application;
 const ApplicationConfig = @import("application.zig").ApplicationConfig;
 const comp = @import("components.zig");
 const State = @import("state.zig");
+const TextureStore = @import("store.zig").TextureStore;
 
 pub fn main() !void {
     var paa = PlatformAgnosticAllocator.init();
@@ -31,9 +32,13 @@ pub fn main() !void {
     var reg = entt.Registry.init(paa.allocator());
     defer reg.deinit();
 
+    var texture_store = TextureStore.init(paa.allocator());
+    defer texture_store.deinit();
+
     var state = State{
         .app = &app,
         .config = &app.config,
+        .texture_store = &texture_store,
         .sounds = .{
             .soundtrack = rl.loadSound("assets/soundtrack.wav"),
             .explosion = rl.loadSound("assets/explosion.wav"),
@@ -58,6 +63,10 @@ pub fn main() !void {
     app.start();
     defer app.stop();
 
+    // Load textures.
+    _ = try texture_store.load("explosion", "assets/explosion.png");
+    defer texture_store.unloadAll();
+
     while (app.isRunning()) {
         // Loop background music.
         if (!rl.isSoundPlaying(state.sounds.soundtrack)) {
@@ -67,10 +76,11 @@ pub fn main() !void {
         handleAppInput(&state);
 
         if (state.isPlaying()) {
+            updateLifetimes(&state);
             handlePlayerInput(&state);
             updateInvaders(&state);
-            updateProjectiles(&state);
-            checkHits(&state);
+            try updateProjectiles(&state);
+            try checkHits(&state);
             checkInvaderGrid(&state);
         }
 
@@ -106,6 +116,9 @@ fn spawnPlayer(state: *State) void {
         .{ 0, player_height },
         .{ player_width, player_height },
     ));
+    // reg.add(player, comp.Shape.rectangle(player_width, player_height));
+    // TODO: Add player sprite
+    // reg.add(player, comp.Visual.sprite("player"));
     reg.add(player, comp.Visual.stub());
     state.player_entity = player;
 }
@@ -127,26 +140,42 @@ fn spawnInvaders(state: *State) void {
     }
 }
 
+fn spawnExplosion(state: *State, pos: comp.Position) !void {
+    const reg = state.registry;
+    const shape = comp.Shape.rectangle(32, 32);
+    const p = comp.Position{
+        .x = pos.x - shape.getWidth() / 2,
+        .y = pos.y - shape.getHeight() / 2,
+    };
+
+    const sprite_index = .{ .x = 2, .y = 0 };
+
+    const e = reg.create();
+    reg.add(e, p);
+    reg.add(e, shape);
+    reg.add(e, comp.Visual.sprite(
+        try state.texture_store.get("explosion"),
+        .{
+            .x = sprite_index.x * shape.getWidth(),
+            .y = sprite_index.y * shape.getHeight(),
+        },
+        .{
+            .x = shape.getWidth(),
+            .y = shape.getHeight(),
+        },
+    ));
+    reg.add(e, comp.Lifetime.new(0.4));
+}
+
 fn resetEntites(state: *State) void {
     var reg = state.registry;
-    var invaders = reg.basicView(comp.Invader);
-    var projectiles = reg.basicView(comp.Projectile);
 
-    // Remove all invaders.
-    var iter = invaders.entityIterator();
+    // Remove all entities.
+    var iter = reg.entities();
     while (iter.next()) |entity| {
         reg.destroy(entity);
     }
 
-    // Remove all projectiles.
-    iter = projectiles.entityIterator();
-    while (iter.next()) |entity| {
-        reg.destroy(entity);
-    }
-
-    if (reg.valid(state.player_entity)) {
-        reg.destroy(state.player_entity);
-    }
     spawnPlayer(state);
     spawnInvaders(state);
 }
@@ -236,7 +265,21 @@ fn handlePlayerInput(state: *State) void {
 // Update
 //------------------------------------------------------------------------------
 
-fn updateProjectiles(state: *State) void {
+fn updateLifetimes(state: *State) void {
+    const delta_time = rl.getFrameTime();
+    var reg = state.registry;
+    var view = reg.view(.{comp.Lifetime}, .{});
+    var iter = view.entityIterator();
+    while (iter.next()) |entity| {
+        var lifetime = view.get(entity);
+        lifetime.update(delta_time);
+        if (lifetime.dead()) {
+            reg.destroy(entity);
+        }
+    }
+}
+
+fn updateProjectiles(state: *State) !void {
     const delta_time = rl.getFrameTime();
     var reg = state.registry;
     var view = reg.view(.{ comp.Projectile, comp.Position, comp.Speed }, .{});
@@ -255,6 +298,7 @@ fn updateProjectiles(state: *State) void {
         const shape = reg.getConst(comp.Shape, entity);
         // Destroy the projectile, when it leaves the screen.
         if (pos.y > state.config.getDisplayHeight()) {
+            try spawnExplosion(state, pos.*);
             // Play impact sound when projectile hits the ground.
             state.playSound(.impact);
             reg.destroy(entity);
@@ -333,7 +377,7 @@ fn updateInvaders(state: *State) void {
     }
 }
 
-fn checkHits(state: *State) void {
+fn checkHits(state: *State) !void {
     var reg = state.registry;
     var targets_view = reg.view(.{ comp.Invader, comp.Position, comp.Shape }, .{});
     var view = reg.view(.{ comp.Projectile, comp.Position, comp.Shape }, .{});
@@ -351,6 +395,7 @@ fn checkHits(state: *State) void {
             const target_shape = targets_view.getConst(comp.Shape, target);
             // Check if projectile hits another projectile.
             if (isHit(projectile_pos, projectile_shape, target_pos, target_shape)) {
+                try spawnExplosion(state, projectile_pos);
                 // Play impact sound when projectile hits projectile.
                 state.playSound(.impact);
                 // Destroy both entities.
@@ -370,6 +415,7 @@ fn checkHits(state: *State) void {
                     const target_shape = targets_view.getConst(comp.Shape, target);
                     // Check if projectile hits invader.
                     if (isHit(projectile_pos, projectile_shape, target_pos, target_shape)) {
+                        try spawnExplosion(state, projectile_pos);
                         state.playSound(.explosion_short);
                         // Destroy both entities.
                         reg.destroy(entity);
@@ -470,6 +516,7 @@ fn renderEntity(pos: comp.Position, shape: comp.Shape, visual: comp.Visual) void
     switch (visual) {
         .stub => renderStub(pos, shape),
         .color => renderShape(pos, shape, visual.color.value, visual.color.outline),
+        .sprite => renderSprite(pos, shape, .{ .x = visual.sprite.pos.x, .y = visual.sprite.pos.y }, visual.sprite.texture.*),
     }
 }
 
@@ -555,6 +602,21 @@ fn renderTextCentered(
 /// TODO: Make visual appearance more noticeable.
 fn renderStub(pos: comp.Position, shape: comp.Shape) void {
     renderShape(pos, shape, rl.Color.magenta, false);
+}
+
+/// Render a sprite.
+fn renderSprite(pos: comp.Position, shape: comp.Shape, source_pos: comp.Position, texture: rl.Texture) void {
+    const p = .{ .x = pos.x, .y = pos.y };
+    texture.drawRec(
+        .{
+            .x = source_pos.x,
+            .y = source_pos.y,
+            .width = shape.getWidth(),
+            .height = shape.getHeight(),
+        },
+        p,
+        rl.Color.white,
+    );
 }
 
 /// Generic rendering function to be used for `stub` and `color` visuals.
