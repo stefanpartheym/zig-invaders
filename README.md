@@ -2,7 +2,9 @@
 
 > My implementation of `Space Invaders` in [zig](https://ziglang.org/) using [raylib](https://github.com/Not-Nik/raylib-zig) and an [ECS](https://github.com/prime31/zig-ecs).
 
-I'm working on this project as part of [The 20 Games Challange](https://20_games_challenge.gitlab.io/). Space Invaders is [Challange #3](https://20_games_challenge.gitlab.io/challenge/#3).
+![Screenshot](./screenshot.png)
+
+I'm working on this game as part of [The 20 Games Challange](https://20_games_challenge.gitlab.io/). Space Invaders is [Challange #3](https://20_games_challenge.gitlab.io/challenge/#3).
 
 ## Goals
 
