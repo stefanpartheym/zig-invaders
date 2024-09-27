@@ -8,6 +8,7 @@ const ApplicationConfig = @import("application.zig").ApplicationConfig;
 const comp = @import("components.zig");
 const State = @import("state.zig");
 const TextureStore = @import("store.zig").TextureStore;
+const Rect = @import("math.zig").Rect;
 
 pub fn main() !void {
     var paa = PlatformAgnosticAllocator.init();
@@ -65,6 +66,8 @@ pub fn main() !void {
 
     // Load textures.
     _ = try texture_store.load("explosion", "assets/explosion.png");
+    _ = try texture_store.load("invaders", "assets/invaders.png");
+    _ = try texture_store.load("player", "assets/player.png");
     defer texture_store.unloadAll();
 
     while (app.isRunning()) {
@@ -73,15 +76,15 @@ pub fn main() !void {
             state.playSound(.soundtrack);
         }
 
-        handleAppInput(&state);
+        try handleAppInput(&state);
 
         if (state.isPlaying()) {
             updateLifetimes(&state);
             handlePlayerInput(&state);
-            updateInvaders(&state);
+            try updateInvaders(&state);
             try updateProjectiles(&state);
             try checkHits(&state);
-            checkInvaderGrid(&state);
+            try checkInvaderGrid(&state);
         }
 
         beginFrame();
@@ -100,32 +103,49 @@ pub fn main() !void {
 // Entities
 //------------------------------------------------------------------------------
 
-fn spawnPlayer(state: *State) void {
+fn spawnPlayer(state: *State) !void {
     const reg = state.registry;
 
-    const player_height = 20;
-    const player_width = player_height * 2;
-    const player = reg.create();
-    reg.add(player, comp.Position{
+    const player_width = 50;
+    const player_height = 40;
+    const entity = reg.create();
+    reg.add(entity, comp.Position{
         .x = state.config.getDisplayWidth() / 2 - player_width / 2,
         .y = state.config.getDisplayHeight() - player_height,
     });
-    reg.add(player, comp.Speed.uniform(300));
-    reg.add(player, comp.Shape.triangle(
-        .{ player_width / 2, 0 },
-        .{ 0, player_height },
-        .{ player_width, player_height },
+    reg.add(entity, comp.Speed.uniform(300));
+    reg.add(entity, comp.Shape.rectangle(player_width, player_height));
+    reg.add(entity, comp.Visual.sprite(
+        try state.texture_store.get("player"),
+        Rect{ .x = 0, .y = 0, .width = 14, .height = 12 },
     ));
-    // reg.add(player, comp.Shape.rectangle(player_width, player_height));
-    // TODO: Add player sprite
-    // reg.add(player, comp.Visual.sprite("player"));
-    reg.add(player, comp.Visual.stub());
-    state.player_entity = player;
+    state.player_entity = entity;
 }
 
-fn spawnInvaders(state: *State) void {
+fn spawnInvaders(state: *State) !void {
     const reg = state.registry;
     const grid = &state.invader_grid;
+
+    const invader_types = [_]Rect{
+        .{
+            .x = 19,
+            .y = 22,
+            .width = 12,
+            .height = 6,
+        },
+        .{
+            .x = 34,
+            .y = 20,
+            .width = 11,
+            .height = 8,
+        },
+        .{
+            .x = 5,
+            .y = 21,
+            .width = 11,
+            .height = 9,
+        },
+    };
     const shape = comp.Shape.rectangle(grid.invader_width, grid.invader_height);
     for (0..grid.rows) |row| {
         for (0..grid.cols) |col| {
@@ -134,7 +154,16 @@ fn spawnInvaders(state: *State) void {
             reg.add(invader, grid.getInvaderPosition(@intCast(row), @intCast(col)));
             reg.add(invader, comp.Speed{ .x = grid.speed, .y = grid.invader_height + grid.space });
             reg.add(invader, shape);
-            reg.add(invader, comp.Visual.color(rl.Color.green, false));
+            const invader_type = invader_types[@mod(row, 3)];
+            reg.add(invader, comp.Visual.sprite(
+                try state.texture_store.get("invaders"),
+                Rect{
+                    .x = invader_type.x,
+                    .y = invader_type.y,
+                    .width = invader_type.width,
+                    .height = invader_type.height,
+                },
+            ));
             reg.add(invader, comp.Cooldown.new(1));
         }
     }
@@ -158,16 +187,14 @@ fn spawnExplosion(state: *State, pos: comp.Position) !void {
         .{
             .x = sprite_index.x * shape.getWidth(),
             .y = sprite_index.y * shape.getHeight(),
-        },
-        .{
-            .x = shape.getWidth(),
-            .y = shape.getHeight(),
+            .width = shape.getWidth(),
+            .height = shape.getHeight(),
         },
     ));
     reg.add(e, comp.Lifetime.new(0.4));
 }
 
-fn resetEntites(state: *State) void {
+fn resetEntites(state: *State) !void {
     var reg = state.registry;
 
     // Remove all entities.
@@ -176,8 +203,8 @@ fn resetEntites(state: *State) void {
         reg.destroy(entity);
     }
 
-    spawnPlayer(state);
-    spawnInvaders(state);
+    try spawnPlayer(state);
+    try spawnInvaders(state);
 }
 
 fn shoot(
@@ -192,18 +219,22 @@ fn shoot(
     reg.add(e, comp.Projectile{ .direction = direction });
     reg.add(e, comp.Position{
         .x = position.x - shape.getWidth() / 2,
-        .y = position.y + if (direction == .up) shape.getHeight() else 0,
+        .y = position.y - if (direction == .up) shape.getHeight() else 0,
     });
     reg.add(e, comp.Speed.uniform(speed));
     reg.add(e, shape);
-    reg.add(e, comp.Visual.stub());
+    const visual = if (direction == .up)
+        comp.Visual.color(rl.Color.blue, false)
+    else
+        comp.Visual.stub();
+    reg.add(e, visual);
 }
 
 //------------------------------------------------------------------------------
 // Input
 //------------------------------------------------------------------------------
 
-fn handleAppInput(state: *State) void {
+fn handleAppInput(state: *State) !void {
     if (rl.windowShouldClose() or rl.isKeyPressed(rl.KeyboardKey.key_q)) {
         state.app.shutdown();
     }
@@ -221,7 +252,7 @@ fn handleAppInput(state: *State) void {
             state.pause();
         } else {
             if (state.isReady()) {
-                resetEntites(state);
+                try resetEntites(state);
             }
             state.start();
         }
@@ -308,7 +339,7 @@ fn updateProjectiles(state: *State) !void {
     }
 }
 
-fn updateInvaders(state: *State) void {
+fn updateInvaders(state: *State) !void {
     var grid = &state.invader_grid;
 
     var offset_y: f32 = 0;
@@ -352,7 +383,7 @@ fn updateInvaders(state: *State) void {
         // Check if invader corssed the invasion zone.
         if (pos.y + shape.getHeight() > state.getInvasionZonePosition()) {
             state.loose();
-            resetEntites(state);
+            try resetEntites(state);
             break;
         }
 
@@ -431,7 +462,7 @@ fn checkHits(state: *State) !void {
                     state.playSound(.explosion);
                     // Destroy projectile entity.
                     state.loose();
-                    resetEntites(state);
+                    try resetEntites(state);
                 }
             },
             else => unreachable,
@@ -461,10 +492,10 @@ fn isHit(
 }
 
 /// Make the player win, once all invaders in the grid are dead.
-fn checkInvaderGrid(state: *State) void {
+fn checkInvaderGrid(state: *State) !void {
     if (state.invader_grid.alive == 0) {
         state.win();
-        resetEntites(state);
+        try resetEntites(state);
     }
 }
 
@@ -516,7 +547,16 @@ fn renderEntity(pos: comp.Position, shape: comp.Shape, visual: comp.Visual) void
     switch (visual) {
         .stub => renderStub(pos, shape),
         .color => renderShape(pos, shape, visual.color.value, visual.color.outline),
-        .sprite => renderSprite(pos, shape, .{ .x = visual.sprite.pos.x, .y = visual.sprite.pos.y }, visual.sprite.texture.*),
+        .sprite => renderSprite(
+            .{
+                .x = pos.x,
+                .y = pos.y,
+                .width = shape.getWidth(),
+                .height = shape.getHeight(),
+            },
+            visual.sprite.rect,
+            visual.sprite.texture.*,
+        ),
     }
 }
 
@@ -605,16 +645,22 @@ fn renderStub(pos: comp.Position, shape: comp.Shape) void {
 }
 
 /// Render a sprite.
-fn renderSprite(pos: comp.Position, shape: comp.Shape, source_pos: comp.Position, texture: rl.Texture) void {
-    const p = .{ .x = pos.x, .y = pos.y };
-    texture.drawRec(
+fn renderSprite(target: Rect, source: Rect, texture: rl.Texture) void {
+    texture.drawPro(
         .{
-            .x = source_pos.x,
-            .y = source_pos.y,
-            .width = shape.getWidth(),
-            .height = shape.getHeight(),
+            .x = source.x,
+            .y = source.y,
+            .width = source.width,
+            .height = source.height,
         },
-        p,
+        .{
+            .x = target.x,
+            .y = target.y,
+            .width = target.width,
+            .height = target.height,
+        },
+        .{ .x = 0, .y = 0 },
+        0,
         rl.Color.white,
     );
 }

@@ -7,7 +7,7 @@ I'm working on this project as part of [The 20 Games Challange](https://20_games
 ## Goals
 
 - [x] Create a player ship that moves side to side.
-- [ ] Create a few different types of alien invaders.
+- [x] Create a few different types of alien invaders.
   - [x] Enemies will move together in a grid. They cross the screen horizontally before dropping vertically and reversing their direction.
 - [x] Add the ability for the player ship to fire rockets that travel up the screen.
 - [x] Add bombs/bullets that the enemies drop. The player’s rockets can destroy enemy bullets.
@@ -38,7 +38,6 @@ List of all assets used in this game:
 
 | File                         | Source/Author                                                                                                                              |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `assets/explosion.png`       | [Sogomn on OpenGameArt.org](https://opengameart.org/content/explosion-3)                                                                   |
 | `assets/soundtrack.wav`      | [stefanpartheym](https://github.com/stefanpartheym) in [Ardour](https://ardour.org/) with [OB-Xd](https://www.discodsp.com/obxd/)          |
 | `assets/explosion.wav`       | [stefanpartheym](https://github.com/stefanpartheym) in [Ardour](https://ardour.org/) with [Surge XT](https://surge-synthesizer.github.io/) |
 | `assets/explosion-short.wav` | [stefanpartheym](https://github.com/stefanpartheym) in [Ardour](https://ardour.org/) with [Surge XT](https://surge-synthesizer.github.io/) |
@@ -46,3 +45,6 @@ List of all assets used in this game:
 | `assets/win.wav`             | [stefanpartheym](https://github.com/stefanpartheym) in [Ardour](https://ardour.org/) with [Surge XT](https://surge-synthesizer.github.io/) |
 | `assets/loose.wav`           | [stefanpartheym](https://github.com/stefanpartheym) in [Ardour](https://ardour.org/) with [Surge XT](https://surge-synthesizer.github.io/) |
 | `assets/gameover.wav`        | [stefanpartheym](https://github.com/stefanpartheym) in [Ardour](https://ardour.org/) with [Surge XT](https://surge-synthesizer.github.io/) |
+| `assets/player.png`          | [stefanpartheym](https://github.com/stefanpartheym) in GIMP                                                                                |
+| `assets/invaders.png`        | [Alfalfamire on OpenGameArt.org](https://opengameart.org/content/8-bit-alien-assets)                                                       |
+| `assets/explosion.png`       | [Sogomn on OpenGameArt.org](https://opengameart.org/content/explosion-3)                                                                   |

@@ -1,4 +1,5 @@
 const rl = @import("raylib");
+const Rect = @import("math.zig").Rect;
 
 pub const Position = struct {
     x: f32,
@@ -109,8 +110,7 @@ pub const Visual = union(VisualType) {
     },
     sprite: struct {
         texture: *const rl.Texture,
-        pos: Position,
-        size: Position,
+        rect: Rect,
     },
 
     /// Creates a stub Visual component.
@@ -132,14 +132,12 @@ pub const Visual = union(VisualType) {
 
     pub fn sprite(
         texture: *const rl.Texture,
-        pos: Position,
-        size: Position,
+        rect: Rect,
     ) Self {
         return Self{
             .sprite = .{
                 .texture = texture,
-                .pos = pos,
-                .size = size,
+                .rect = rect,
             },
         };
     }
