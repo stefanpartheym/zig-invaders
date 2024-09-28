@@ -1,5 +1,6 @@
 const rl = @import("raylib");
 const Rect = @import("math.zig").Rect;
+const sprites = @import("sprites.zig");
 
 pub const Position = struct {
     x: f32,
@@ -94,6 +95,7 @@ pub const VisualType = enum {
     stub,
     color,
     sprite,
+    animation,
 };
 
 pub const Visual = union(VisualType) {
@@ -111,6 +113,10 @@ pub const Visual = union(VisualType) {
     sprite: struct {
         texture: *const rl.Texture,
         rect: Rect,
+    },
+    animation: struct {
+        texture: *const rl.Texture,
+        playing_animation: sprites.PlayingAnimation,
     },
 
     /// Creates a stub Visual component.
@@ -138,6 +144,18 @@ pub const Visual = union(VisualType) {
             .sprite = .{
                 .texture = texture,
                 .rect = rect,
+            },
+        };
+    }
+
+    pub fn animation(
+        texture: *const rl.Texture,
+        playing_animation: sprites.PlayingAnimation,
+    ) Self {
+        return Self{
+            .animation = .{
+                .texture = texture,
+                .playing_animation = playing_animation,
             },
         };
     }

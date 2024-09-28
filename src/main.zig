@@ -8,7 +8,10 @@ const ApplicationConfig = @import("application.zig").ApplicationConfig;
 const comp = @import("components.zig");
 const State = @import("state.zig");
 const TextureStore = @import("store.zig").TextureStore;
+const sprites = @import("sprites.zig");
 const Rect = @import("math.zig").Rect;
+
+var explosion_atlas: sprites.AnimatedSpriteSheet = undefined;
 
 pub fn main() !void {
     var paa = PlatformAgnosticAllocator.init();
@@ -70,6 +73,9 @@ pub fn main() !void {
     _ = try texture_store.load("player", "assets/player.png");
     defer texture_store.unloadAll();
 
+    explosion_atlas = try sprites.AnimatedSpriteSheet.initFromGrid(paa.allocator(), 1, 6, "explosion");
+    defer explosion_atlas.deinit();
+
     while (app.isRunning()) {
         // Loop background music.
         if (!rl.isSoundPlaying(state.sounds.soundtrack)) {
@@ -81,6 +87,7 @@ pub fn main() !void {
         if (state.isPlaying()) {
             updateLifetimes(&state);
             handlePlayerInput(&state);
+            updateAnimations(&state);
             try updateInvaders(&state);
             try updateProjectiles(&state);
             try checkHits(&state);
@@ -176,22 +183,19 @@ fn spawnExplosion(state: *State, pos: comp.Position) !void {
         .x = pos.x - shape.getWidth() / 2,
         .y = pos.y - shape.getHeight() / 2,
     };
-
-    const sprite_index = .{ .x = 2, .y = 0 };
+    var playing_animation = explosion_atlas.playAnimation("explosion0").?;
+    playing_animation.play();
+    playing_animation.setSpeed(10);
+    playing_animation.loop(false);
 
     const e = reg.create();
     reg.add(e, p);
     reg.add(e, shape);
-    reg.add(e, comp.Visual.sprite(
+    reg.add(e, comp.Visual.animation(
         try state.texture_store.get("explosion"),
-        .{
-            .x = sprite_index.x * shape.getWidth(),
-            .y = sprite_index.y * shape.getHeight(),
-            .width = shape.getWidth(),
-            .height = shape.getHeight(),
-        },
+        playing_animation,
     ));
-    reg.add(e, comp.Lifetime.new(0.4));
+    reg.add(e, comp.Lifetime.new(0.6));
 }
 
 fn resetEntites(state: *State) !void {
@@ -335,6 +339,19 @@ fn updateProjectiles(state: *State) !void {
             reg.destroy(entity);
         } else if (pos.y + shape.getHeight() < 0) {
             reg.destroy(entity);
+        }
+    }
+}
+
+fn updateAnimations(state: *State) void {
+    const delta_time = rl.getFrameTime();
+    var reg = state.registry;
+    var view = reg.view(.{comp.Visual}, .{});
+    var iter = view.entityIterator();
+    while (iter.next()) |entity| {
+        var visual = view.get(entity);
+        if (visual.* == .animation) {
+            visual.animation.playing_animation.tick(delta_time);
         }
     }
 }
@@ -557,6 +574,29 @@ fn renderEntity(pos: comp.Position, shape: comp.Shape, visual: comp.Visual) void
             visual.sprite.rect,
             visual.sprite.texture.*,
         ),
+        .animation => {
+            var anim = visual.animation.playing_animation;
+            const frame = anim.getCurrentFrame();
+            const frames: f32 = @floatFromInt(visual.animation.playing_animation.animation.frames.len);
+            const texture_width = @as(f32, @floatFromInt(visual.animation.texture.width));
+            const texture_height = @as(f32, @floatFromInt(visual.animation.texture.height));
+            const source_rect = Rect{
+                .x = texture_width * frame.region.u * texture_width / frames,
+                .y = texture_height * frame.region.v * texture_height / frames,
+                .width = texture_width / frames,
+                .height = texture_height,
+            };
+            renderSprite(
+                .{
+                    .x = pos.x,
+                    .y = pos.y,
+                    .width = shape.getWidth(),
+                    .height = shape.getHeight(),
+                },
+                source_rect,
+                visual.animation.texture.*,
+            );
+        },
     }
 }
 

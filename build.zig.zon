@@ -31,6 +31,10 @@
             .url = "git+https://github.com/Not-Nik/raylib-zig.git#f26b2ab084be5e2840b7451818590cc512b7b972",
             .hash = "1220fc554f109a45a77ee5c58b4a847936dc0b24dcbed818b65a02de1b58500041dc",
         },
+        .zalgebra = .{
+            .url = "git+https://github.com/kooparse/zalgebra.git#e36116987d11c4a28ab8a03ab62d71be8b81404a",
+            .hash = "12200e1b17e15217623e36563e459164fff4debb8210ea9d027d8548aca6d30f0811",
+        },
     },
     .paths = .{
         "build.zig",
