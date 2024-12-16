@@ -7,7 +7,6 @@ const Options = struct {
 };
 
 pub fn build(b: *std.Build) !void {
-    const project_name = "zig-invaders";
     const options = Options{
         .target = b.standardTargetOptions(.{}),
         .optimize = b.standardOptimizeOption(.{}),
@@ -31,7 +30,7 @@ pub fn build(b: *std.Build) !void {
         const activate_emsdk_step = zemscripten.activateEmsdkStep(b, "3.1.70");
 
         const wasm = b.addStaticLibrary(.{
-            .name = project_name,
+            .name = "index",
             .root_source_file = b.path("src/main.zig"),
             .target = options.target,
             .optimize = options.optimize,
@@ -72,6 +71,7 @@ pub fn build(b: *std.Build) !void {
                 .embed_paths = &.{},
                 .preload_paths = &.{.{ .src_path = "assets/" }},
                 .install_dir = .{ .custom = install_dir },
+                .shell_file_path = "src/web/shell.html",
             },
         );
         emcc_step.dependOn(activate_emsdk_step);
@@ -80,14 +80,14 @@ pub fn build(b: *std.Build) !void {
         const emrun_args = .{};
         const emrun_step = zemscripten.emrunStep(
             b,
-            b.getInstallPath(.{ .custom = install_dir }, project_name ++ ".html"),
+            b.getInstallPath(.{ .custom = install_dir }, "index.html"),
             &emrun_args,
         );
         emrun_step.dependOn(emcc_step);
         b.step("emrun", "Build and open the web app locally using emrun").dependOn(emrun_step);
     } else {
         const exe = b.addExecutable(.{
-            .name = project_name,
+            .name = "zig-invaders",
             .root_source_file = b.path("src/main.zig"),
             .target = options.target,
             .optimize = options.optimize,
