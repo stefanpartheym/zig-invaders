@@ -581,8 +581,8 @@ fn renderEntity(pos: comp.Position, shape: comp.Shape, visual: comp.Visual) void
             const texture_width = @as(f32, @floatFromInt(visual.animation.texture.width));
             const texture_height = @as(f32, @floatFromInt(visual.animation.texture.height));
             const source_rect = Rect{
-                .x = texture_width * frame.region.u * texture_width / frames,
-                .y = texture_height * frame.region.v * texture_height / frames,
+                .x = texture_width * frame.region.u,
+                .y = texture_height * frame.region.v,
                 .width = texture_width / frames,
                 .height = texture_height,
             };
