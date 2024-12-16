@@ -35,6 +35,14 @@
             .url = "git+https://github.com/kooparse/zalgebra.git#e36116987d11c4a28ab8a03ab62d71be8b81404a",
             .hash = "12200e1b17e15217623e36563e459164fff4debb8210ea9d027d8548aca6d30f0811",
         },
+        .zemscripten = .{
+            .url = "git+https://github.com/stefanpartheym/zemscripten.git#bd5110efc9a52c0ea45a1947951e09aa80afaba4",
+            .hash = "1220c0281da2e7bfc0f7caba4f47ad025e2c93b877de599870a3289a7b116ac6441b",
+        },
+        .emsdk = .{
+            .url = "git+https://github.com/emscripten-core/emsdk?ref=3.1.70#2514ec738de72cebbba7f4fdba0cf2fabcb779a5",
+            .hash = "12203d37f4492c950b6a30710844d6896fbeffc9bc6e70bffef6f702f7c5bc9849f0",
+        },
     },
     .paths = .{
         "build.zig",

@@ -23,6 +23,13 @@ I'm working on this game as part of [The 20 Games Challange](https://20_games_ch
 zig build run
 ```
 
+## Building for the web
+
+```sh
+zig build -Dtarget=wasm32-emscripten
+```
+
+
 ## Controls
 
 | Key                | Description         |
