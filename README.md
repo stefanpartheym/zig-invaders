@@ -29,7 +29,6 @@ zig build run
 zig build -Dtarget=wasm32-emscripten
 ```
 
-
 ## Controls
 
 | Key                | Description         |
@@ -40,6 +39,7 @@ zig build -Dtarget=wasm32-emscripten
 | `Enter`            | Start/pause/resume  |
 | `F1`               | Toggle debug mode   |
 | `F2`               | Toggle sounds/music |
+| `Q`, `Escape`      | Quit game           |
 
 ## Assets
 
