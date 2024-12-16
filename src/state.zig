@@ -38,7 +38,7 @@ invader_grid: InvaderGridState,
 invasion_zone: f32,
 
 status: Status = .ready,
-score: u8 = 0,
+score: u32 = 0,
 lives: u8 = max_lives,
 
 pub fn playSound(self: *State, sound_type: Sounds) void {
@@ -80,7 +80,6 @@ pub fn pause(self: *State) void {
 
 pub fn win(self: *State) void {
     self.playSound(.win);
-    self.score += 1;
     self.status = .won;
     self.invader_grid.nextWave();
 }
@@ -98,6 +97,10 @@ pub fn loose(self: *State) void {
         self.score = 0;
         self.invader_grid.reset();
     }
+}
+
+pub fn increaseScore(self: *State, value: u8) void {
+    self.score += value;
 }
 
 pub fn isReady(self: *State) bool {

@@ -449,6 +449,8 @@ fn checkHits(state: *State) !void {
                 // Destroy both entities.
                 reg.destroy(entity);
                 reg.destroy(target);
+                // Update player score.
+                state.increaseScore(1);
             }
         }
 
@@ -470,6 +472,8 @@ fn checkHits(state: *State) !void {
                         reg.destroy(target);
                         // Reduce number of alive invaders in grid.
                         state.invader_grid.alive -= 1;
+                        // Update player score.
+                        state.increaseScore(5);
                     }
                 }
             },
