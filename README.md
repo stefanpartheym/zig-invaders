@@ -17,6 +17,10 @@ I'm working on this game as part of [The 20 Games Challange](https://20_games_ch
 - [ ] Add a mothership that will cross the screen periodically. Destroying it will result in bonus points.
 - [x] Add a UI that tracks the player score and lives left. The player starts with three lives.
 
+## Playing the web version of the game
+
+Head over to [itch.io](https://steflo.itch.io/zig-invaders) to play the game in your browser.
+
 ## Running the game
 
 ```sh
