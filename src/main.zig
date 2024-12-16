@@ -266,29 +266,29 @@ fn handleAppInput(state: *State) !void {
 fn handlePlayerInput(state: *State) void {
     var pos = state.registry.get(comp.Position, state.player_entity);
     const speed = state.registry.getConst(comp.Speed, state.player_entity);
+    const shape = state.registry.getConst(comp.Shape, state.player_entity);
     const delta_time = rl.getFrameTime();
 
     if (rl.isKeyDown(rl.KeyboardKey.key_h) or
         rl.isKeyDown(rl.KeyboardKey.key_left))
     {
-        pos.x -= speed.x * delta_time;
+        pos.x = @max(pos.x - speed.x * delta_time, 0);
     }
 
     if (rl.isKeyDown(rl.KeyboardKey.key_l) or
         rl.isKeyDown(rl.KeyboardKey.key_right))
     {
-        pos.x += speed.x * delta_time;
+        const max_x = state.config.getDisplayWidth() - shape.getWidth();
+        pos.x = @min(pos.x + speed.x * delta_time, max_x);
     }
 
     if (rl.isKeyPressed(rl.KeyboardKey.key_space)) {
-        const player_pos = state.registry.getConst(comp.Position, state.player_entity);
-        const player_shape = state.registry.getConst(comp.Shape, state.player_entity);
         shoot(
             state,
             .up,
             .{
-                .x = player_pos.x + player_shape.getWidth() / 2,
-                .y = player_pos.y,
+                .x = pos.x + shape.getWidth() / 2,
+                .y = pos.y,
             },
             comp.Shape.rectangle(4, 12),
             300,
